@@ -1,0 +1,109 @@
+---
+title: "ESM 244 Lab 3"
+author: "Keene Morrow"
+date: "1/23/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE) # reminder, this is where you can set global options for code chunks
+
+library(tidyverse)
+library(janitor)
+library(here)
+library(sf)
+library(tmap)
+
+```
+
+## Binary logistics regression: Penguins!
+
+Read in data:
+```{r}
+gentoo <- read_csv("gentoo_lter.csv")
+chinstrap <- read_csv("chinstrap_lter.csv")
+
+# Use full_join() to merge them together (keeping everything)
+penguins <- full_join(chinstrap, gentoo) %>% 
+  clean_names() %>% 
+  mutate(sex = str_to_lower(sex)) %>% 
+  filter(sex %in% c("male","female"))
+```
+
+Let's take a look:
+
+```{r}
+ggplot(data = penguins, aes(x = sex, y = body_mass_g)) +
+  geom_jitter(
+    aes(color = sex,
+        pch = sex) # changes point style
+  ) +
+  facet_wrap(~species) +
+  theme_minimal()
+```
+
+Based on this, it seems pretty likely that we'd be able to identify whether a penguin is a Gentoo or Chinstrap if we know that it's female and 5000g or male and 3000g.
+Harder if a 4900g male penguin or 4000g female penguin.
+
+
+
+Code
+- Chinstrap penguins as 1
+- Gentoo penguins as 0
+using `case_when`
+
+```{r}
+penguin_bin <- penguins %>%
+  mutate(
+    sp_binary = case_when(
+      species == "Chinstrap penguin (Pygoscelis antarctica)" ~ 1,
+      species == "Gentoo penguin (Pygoscelis papua)" ~ 0
+    )
+  )
+```
+
+Binary logistic regression
+(Attempting to predict species based on sex and body mass)
+
+```{r}
+penguin_blr <- glm(sp_binary ~ sex + body_mass_g,
+                   family = "binomial",
+                   data = penguin_bin)
+
+summary(penguin_blr)
+```
+Check out the estimates in the summary above.  Remember that the estimates of coefficients are the log odds. The coefficient is the impact on the probability that a penguin is a Chinstrap.
+
+Let's make some predictions for penguins!
+(this is pretty close to classification)
+
+1. What is the probability that a penguin is a chinstrap penguin if it weighs 4500g and is male?
+
+```{r}
+# models like new data to be presented to them as a shiny new data frame
+df_m4500 <- data.frame(sex = "male", body_mass_g = 4500) # variable names and contents must match the original data frame
+
+# find log odds of this penguin being chinstrap:
+m4500_logodds <- predict(penguin_blr, newdata = df_m4500, type = "link")
+
+# But was does 4.05 mean?
+# Let's make it give us a probability
+
+m4500_logodds <- predict(penguin_blr, newdata = df_m4500, type = "response")
+
+# So, 98.3% chance that it's a Chinstrap penguin
+```
+
+2. What is the probability that a penguin is a chinstrap penguin if it weighs 4000g and female?
+(this is right on the edge of the two groups)
+```{r}
+df_f4000 <- data.frame(sex = "female", body_mass_g = 4000)
+
+f4000_logodds <-  predict(penguin_blr, newdata = df_f4000, type = "response")
+# 65.4% chance that it's a Chinstrap penguin :)
+```
+
+
+
